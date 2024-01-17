@@ -1,4 +1,4 @@
-﻿#region Setup########################################################################
+#region Setup########################################################################
 # Prompt the user for API Key
 cls
 if($apikey -eq $null){
@@ -10,7 +10,7 @@ else{
         $apikey=Read-Host -Prompt "Paste your API key for Freshservice"
         $tenant=Read-Host -Prompt "Provide the domain prefix target. Ex: companyname"
         if ($tenant -match '\.') {
-            Write-host "Enter only the string of characters after https:// and the first period. You will be prompted again in 5 seconds."
+            Write-host "Enter only the string of characters after https:// and before the first period. You will be prompted again in 5 seconds."
             start-sleep 5
             $tenant=$null
             cls
@@ -18,7 +18,6 @@ else{
         else{}
     }
     }
-    else{}
 
 #Convert API to base64
 $user=$apikey+":"
@@ -37,13 +36,14 @@ if($tenant -eq $null){
 
 #Check if tenant is sandbox and warn if not
 if($tenant -notmatch "sandbox"){
+    cls
     Write-warning "You have not specified a sandbox instance to run this script against. Use Control+C to abort the script if this is not the intent."
-    $proceed=Read-host "Type continue to proceed with the script actions"
-    if($proceed -eq "continue"){
+    $proceed=Read-host "Type the previously entered string to proceed with the script actions"
+    if($proceed -eq $tenant){
     }
     else{
     cls
-    Write-host "Challenge phrase failed. Exiting."
+    Write-host "Your entries of $($tenant) and $($proceed) did not match. Exiting."
     break}
     }
 
@@ -74,27 +74,23 @@ for ($i = 0; $i -lt $alllist.Count; $i++) {
 }
 
 # Get and process desired asset
-$choice = Read-Host "Enter the number (1-$($alllist.Count))"
-if ($choice -ge 1 -and $choice -le $alllist.Count) {
-    $selectedItem = $alllist[$choice - 1]
-    $selecteditemid=$selectedItem.id
-    Write-Output "You selected: $($selectedItem.name)"
-    Start-Sleep -Seconds 3
-}  else {
-    Write-Output "Invalid selection. Please enter a number between 1 and $($alllist.Count) or Ctrl+C to quit."
-    Start-Sleep -Seconds 2
-}
+do{
+    $choice = Read-Host "Enter the number (1-$($alllist.Count))"
+    $do=0
+    if ($choice -ge 1 -and $choice -le $alllist.Count) {
+        $selectedItem = $alllist[$choice - 1]
+        $selecteditemid=$selectedItem.id
+        Write-Output "You selected: $($selectedItem.name)"
+        Start-Sleep -Seconds 3
+    }  else {
+        cls
+        Write-Output "Invalid selection. Please enter a number between 1 and $($alllist.Count)."
+        $do=1
+        Start-Sleep -Seconds 2
+    }}while($do -eq 1)
 #endregion###########################################################################
 
-#Display a final warning to the user
-if($scope -ne 0 -and $tenant -notmatch "sandbox"){
-    cls
-    Write-warning "You are about to trigger a deletion of $scope $($selecteditem.name)'s from a non-sandbox environment. This is the last chance to bail out."
-    $confirm=Read-host -Foregroundcolor Red "Please confirm you want to proceed by entering confirmed, else use Ctl+C or type quit to exit"
-    if($confirm -eq 'confirmed'){
-    Write-host "Confirmation received, 5 seconds to start. Dont say you werent warned!" -ForegroundColor Red
-    start-sleep 5}
-    else{}}
+
 
 
 #region Get list of devices
@@ -104,13 +100,31 @@ $assets=Invoke-WebRequest -Uri $list -Method get -Headers $headers -ErrorAction 
 $scope=$assets.Headers["X-Search-Results-Count"]
 $json=$assets.Content|ConvertFrom-Json
 $ids=$json.assets|ForEach-Object {$_.display_id}
-
-Write-host "Mass deletion event triggered for $($selecteditem.name). The total devices found is $scope. An update will be provided each time a new set of 30 assets is pulled and deleted."
 $ids=1
 $total=0
 #endregion############################################################################
 
+#Display a final warning to the user
+if($scope -ne 0 -and $tenant -notmatch "sandbox"){
+    cls
+    Write-warning "You are about to trigger a deletion of $scope $($selecteditem.name)'s from a non-sandbox environment. This is the last chance to bail out."
+    $confirm=Read-host "Please confirm you want to proceed by entering `"confirmed`" (without quotes), else use Ctl+C or type quit to exit"
+    if($confirm -eq 'confirmed'){
+    Write-host "Confirmation received. Dont say you werent warned!" -ForegroundColor Red
+    start-sleep 5}
+    elseif($confirm -eq "quit"){
+    break}
+    else{}
+    }
+    cls
+    Write-host -foregroundcolor Red "Mass deletion event triggered for $($selecteditem.name). The total number of devices in scope is $($scope)."
+    Start-sleep 5
+    write-host -ForegroundColor Yellow "An update will be provided each time a new set of 30 assets is pulled and deleted."
+    Write-host "Ten seconds until deletion starts"
+    start-sleep 10
+
 #region Permanently delete all devices################################################
+
 $assets=Invoke-WebRequest -Uri $list -Method get -Headers $headers -ErrorAction Stop
 $scope=$assets.Headers["X-Search-Results-Count"]
 $json=$assets.Content|ConvertFrom-Json
